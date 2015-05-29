@@ -3,46 +3,51 @@ flashrd
 
 # flashrd installation
 
-It's pretty simple. do a make build, or unpack the openbsd baseXX.tgz, etcXX.tgz, and manXX.tgz (minimum recommended) into a directory. (Feel free to omit any sets that aren't necessary, but baseXX.tgz and etcXX.tgz are the minimum required.)
+It's pretty simple. Using the prepare script to fetch and unpack all nessessary files.
 
-Please note that invocations of flashrd must be made on the same architecture that the image is destined for (you must be on i386 to create an image for i386). This limitation is due to the compiler. You can fix mkkern to use a cross-compiler, if you like. The cfgflashrd tool can configure images from other architectures, no such limitation exists there.
-## Step 1: Unpack OpenBSD
+## Step 1: 
 
+    ./prepare 
 
-    mkdir /tmp/openbsd
-    cd /tmp/openbsd
-    tar xzpf ~/baseXX.tgz
-    tar xzpf ~/etcXX.tgz
-    tar xzpf ~/manXX.tgz
-    tar xzpf ~/miscXX.tgz
-    tar xzpf ~/compXX.tgz
-    tar xzpf ~/gameXX.tgz 
+All files from the spezific distribution will be downloaded, unpacked, patched and a sandbox will be created.
+The single steps are
 
-(Alternately, you could 'make build' after getting the source tree in Step 2)
-## Step 2: Get source tree
+* download base, man, comp, src and sys
+* check if valid
+* unpack and copy to the right place
 
-Make sure you have a source tree for the same system version at /usr/src. If you don't, get a new one. (flashrd compiles the kernel, plus certain specific commands with crunchgen)
+## Step 2: Build binaries for OpenBSD from source
 
-    cd /usr
-    cvs -d anoncvs@anoncvs.openbsd.org:/cvs -q get -rOPENBSD_X_X src 
+Generate a new userland makes building an own flash much easier.
 
-(If you are building against a snapshot, you would not specfiy a tag with -r)
-## Step 3: Run Flashrd
+    cd /usr/src
+    rm -Rf /usr/obj/*
+    make obj
+    cd /usr/src/etc && env DESTDIR=/ make distrib-dirs
+    cd /usr/src
+    make depend
+    make
 
-Then run flashrd against it.
+## Step 3: Get source tree
 
-    cd ~
-    tar xzf flashrd-X.Y.tar.gz
-    cd flashrd-X.Y
-    ./flashrd /tmp/openbsd 
+Running flashrd to finish an image or also copy the image to device. With the prepare script we have an sandbox with all files we need.
 
-You'll end up with a disk image that you can write to flash. Follow the image installation instructions for further guidance.
-## alternate Step 3:
+    # this writes the image directly to den sd0 device
+    ./flashrd -d sd0 ./sandbox/
+    # only generating an image flashimg.ARCH-DATE
+    ./flashrd ./sandbox/
+    
+    # a very important step is configuring the serial console
+    # otherwise you can not connect serial
+    # you will also be asked for hostname, dns and password
+    # configure directly the installation on the device
+    ./cflashrd -d sd0 -c 38400
+    
+    # OR modify the image from before
+    ./cflashrd -i flashimg.ARCH-DATE -c 38400
+    
+## Step 3: Writing flash to device if not done before
 
-flashrd can also write directly to a disk. Whatever geometry the device shows up as will be used for the disklabel this way. This tends to be a bit slower than first creating a disk image and transferring it with growimg (the above instructions).
+This step is for flashing the image to one or many devices. It finds the size of the device, expands the image and writes it down.
 
-    cd ~
-    tar xzf flashrd-X.Y.tar.gz
-    cd flashrd-X.Y
-    ./flashrd -disk sd2 /tmp/openbsd
-    ./cfgflashrd -disk sd2 
+    ./growimg -t sd0 flashimg.ARCH-DATE
