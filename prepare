@@ -1,0 +1,88 @@
+#!/bin/sh
+
+CWD=`pwd`
+WORKDIR=sandbox
+DISTDIR=distfiles
+RELEASE="5.7"
+SHORTRELEASE="57"
+SRCDIR=/usr/src
+TMPDIR=/tmp
+
+BASE_URL=http://ftp.nluug.nl/OpenBSD/${RELEASE}
+PATCH_URL=http://ftp.openbsd.org/pub/OpenBSD/patches/${RELEASE}.tar.gz
+
+echo "Cleaning up previous build"
+if [ -d ${WORKDIR} ]; then
+  rm -rf ${WORKDIR}
+fi
+
+mkdir -p ${CWD}/${WORKDIR}
+mkdir -p ${CWD}/${DISTDIR}
+
+binfiles="base${SHORTRELEASE}.tgz
+comp${SHORTRELEASE}.tgz
+man${SHORTRELEASE}.tgz"
+
+srcfiles="src.tar.gz
+sys.tar.gz"
+
+
+echo "Retrieving binary releases"
+cd ${CWD}/${DISTDIR}
+for file in ${binfiles}; do
+  if [ ! -f ${file} ] ; then
+    echo "Needed ${file}, didn't find it in current dir so downloading.."
+    ftp ${BASE_URL}/`machine`/${file}
+  fi
+done
+
+echo "Retrieving source..."
+for file in ${srcfiles}; do
+  if [ ! -f ${file} ] ; then
+    echo "Needed ${file}, didn't find it in current dir so downloading.."
+    ftp ${BASE_URL}/${file}
+  fi
+done
+
+echo "Retrieving file checksum"
+ftp ${BASE_URL}/`machine`/SHA256
+
+for file in ${binfiles}; do
+  echo "checking ${file} file integrity"
+  sha256 -C SHA256 ${file}
+  if [ $? != 0 ] ; then
+    echo "${file} is corrupt! Exiting"
+    exit
+  fi
+  echo "file integrity OK, extracting ${file} to ${WORKDIR}"
+  tar zxpf ${file} -C ${CWD}/${WORKDIR}
+done
+
+echo "Retrieving file checksum"
+ftp ${BASE_URL}/SHA256
+
+for file in ${srcfiles}; do
+  echo "checking ${file} file integrity"
+  sha256 -C SHA256 ${file}
+  if [ $? != 0 ] ; then
+    echo "${file} is corrupt! Exiting"
+    exit
+  fi
+    echo "file integrity OK, extracting ${file} to ${SRCDIR}"
+    tar zxpf ${file} -C ${SRCDIR}
+done
+
+echo "Retrieving patch file"
+cd ${TMPDIR}
+ftp ${PATCH_URL}
+tar zxpf ${RELEASE}.tar.gz
+cd ${RELEASE}/common
+for file in `ls *.sig`; do 
+  echo "executing patch from file ${file}"
+  signify -Vep /etc/signify/openbsd-${SHORTRELEASE}-base.pub -x ${file} -m - | \
+    (cd /usr/src && patch -p0)
+  cd ${TMPDIR}/${RELEASE}/common
+done
+
+echo "to create changes type: ./go-to-sandbox"
+echo "to start building type: ./flashrd ${CWD}/${WORKDIR}"
